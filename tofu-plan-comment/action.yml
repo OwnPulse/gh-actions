@@ -1,0 +1,38 @@
+name: OpenTofu Plan Comment
+description: Post or update an OpenTofu plan comment on a pull request
+
+inputs:
+  stage:
+    description: Stage name (e.g. stage0-org)
+    required: true
+  plan-file:
+    description: Path to the plan output text file
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Comment PR with plan
+      uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea  # v7.0.1
+      with:
+        script: |
+          const fs = require('fs');
+          const plan = fs.readFileSync('${{ inputs.plan-file }}', 'utf8');
+          const truncated = plan.length > 60000 ? plan.substring(0, 60000) + '\n... (truncated)' : plan;
+          const body = `### OpenTofu Plan: \`${{ inputs.stage }}\`\n\n<details><summary>Show Plan</summary>\n\n\`\`\`\n${truncated}\n\`\`\`\n\n</details>`;
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner, repo: context.repo.repo,
+            issue_number: context.issue.number,
+          });
+          const existing = comments.find(c => c.body.includes('### OpenTofu Plan: `${{ inputs.stage }}`'));
+          if (existing) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner, repo: context.repo.repo,
+              comment_id: existing.id, body,
+            });
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: context.issue.number, body,
+            });
+          }

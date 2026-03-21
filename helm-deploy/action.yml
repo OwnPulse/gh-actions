@@ -1,0 +1,52 @@
+name: Helm Deploy
+description: Deploy a Helm chart with rollout verification and automatic rollback
+
+inputs:
+  release-name:
+    description: Helm release name
+    required: true
+  chart-path:
+    description: Path to Helm chart
+    required: true
+  namespace:
+    description: Kubernetes namespace
+    required: true
+  image-tag:
+    description: Container image tag to deploy
+    required: true
+  values-file:
+    description: Values file path (optional, for staging overrides)
+    required: false
+    default: ''
+  deployment-name:
+    description: Full deployment name for rollout status check
+    required: true
+  timeout:
+    description: Rollout timeout
+    required: false
+    default: '120s'
+
+runs:
+  using: composite
+  steps:
+    - name: Deploy ${{ inputs.release-name }}
+      shell: bash
+      run: |
+        VALUES_ARG=""
+        if [ -n "${{ inputs.values-file }}" ]; then
+          VALUES_ARG="-f ${{ inputs.values-file }}"
+        fi
+        helm upgrade --install ${{ inputs.release-name }} ${{ inputs.chart-path }} \
+          -n ${{ inputs.namespace }} \
+          $VALUES_ARG \
+          --set "image.tag=${{ inputs.image-tag }}"
+
+    - name: Verify ${{ inputs.release-name }} rollout
+      id: rollout
+      shell: bash
+      run: kubectl rollout status deployment/${{ inputs.deployment-name }} -n ${{ inputs.namespace }} --timeout=${{ inputs.timeout }}
+
+    - name: Rollback ${{ inputs.release-name }} on failure
+      if: failure() && steps.rollout.outcome == 'failure'
+      shell: bash
+      run: helm rollback ${{ inputs.release-name }} -n ${{ inputs.namespace }}

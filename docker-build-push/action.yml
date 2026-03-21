@@ -1,0 +1,32 @@
+name: Docker Build & Push
+description: Build and push a Docker image to GitHub Container Registry
+
+inputs:
+  context:
+    description: Docker build context directory
+    required: true
+  image-name:
+    description: Image name (without registry prefix)
+    required: true
+  tag:
+    description: Image tag
+    required: true
+  registry:
+    description: Container registry
+    required: false
+    default: ghcr.io
+
+runs:
+  using: composite
+  steps:
+    - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
+      with:
+        registry: ${{ inputs.registry }}
+        username: ${{ github.actor }}
+        password: ${{ github.token }}
+
+    - uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294  # v7
+      with:
+        context: ${{ inputs.context }}
+        push: true
+        tags: ${{ inputs.registry }}/ownpulse/${{ inputs.image-name }}:${{ inputs.tag }}

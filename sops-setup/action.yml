@@ -1,0 +1,22 @@
+name: SOPS Setup
+description: Install SOPS and configure age key for decryption
+
+inputs:
+  age-key:
+    description: SOPS age key content
+    required: true
+  sops-version:
+    description: SOPS version to install
+    required: false
+    default: '3.12.2'
+
+runs:
+  using: composite
+  steps:
+    - name: Install and configure SOPS
+      shell: bash
+      run: |
+        curl -fsSL "https://github.com/getsops/sops/releases/download/v${{ inputs.sops-version }}/sops-v${{ inputs.sops-version }}.linux.amd64" -o /usr/local/bin/sops
+        chmod +x /usr/local/bin/sops
+        mkdir -p "$HOME/.config/sops/age"
+        echo "${{ inputs.age-key }}" > "$HOME/.config/sops/age/keys.txt"

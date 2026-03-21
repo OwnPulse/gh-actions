@@ -1,0 +1,50 @@
+name: Coverage Badge
+description: Generate a coverage badge and deploy to the badges branch
+
+inputs:
+  percentage:
+    description: Coverage percentage
+    required: true
+  label:
+    description: Badge label (e.g. "backend coverage")
+    required: true
+  badge-file:
+    description: Badge JSON filename (e.g. "backend-coverage.json")
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Generate badge
+      shell: bash
+      run: |
+        COV="${{ inputs.percentage }}"
+        if [ "$(echo "$COV >= 70" | bc -l)" -eq 1 ]; then
+          COLOR="brightgreen"
+        elif [ "$(echo "$COV >= 50" | bc -l)" -eq 1 ]; then
+          COLOR="yellow"
+        else
+          COLOR="red"
+        fi
+        mkdir -p /tmp/badges
+        cat > /tmp/badges/${{ inputs.badge-file }} << BADGE
+        {
+          "schemaVersion": 1,
+          "label": "${{ inputs.label }}",
+          "message": "${COV}%",
+          "color": "${COLOR}"
+        }
+        BADGE
+
+    - name: Deploy badge to badges branch
+      shell: bash
+      run: |
+        cd "$GITHUB_WORKSPACE"
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git fetch origin badges || true
+        git checkout badges 2>/dev/null || git checkout --orphan badges
+        cp /tmp/badges/${{ inputs.badge-file }} .
+        git add ${{ inputs.badge-file }}
+        git diff --cached --quiet || git commit -m "Update ${{ inputs.label }} badge"
+        git push origin badges

@@ -1,0 +1,41 @@
+name: Smoke Test
+description: Run a health check smoke test against a Kubernetes service
+
+inputs:
+  service-url:
+    description: Full URL to health endpoint (e.g. http://api-ownpulse-api:80/api/v1/health)
+    required: true
+  namespace:
+    description: Kubernetes namespace for the busybox pod
+    required: true
+  label:
+    description: Human-readable label for log output (e.g. "Staging API")
+    required: false
+    default: 'Service'
+  retries:
+    description: Number of retry attempts
+    required: false
+    default: '10'
+  interval:
+    description: Seconds between retries
+    required: false
+    default: '5'
+
+runs:
+  using: composite
+  steps:
+    - name: Smoke test ${{ inputs.label }}
+      shell: bash
+      run: |
+        for i in $(seq 1 ${{ inputs.retries }}); do
+          if kubectl run smoke-$(date +%s) --rm -i --restart=Never \
+            --image=busybox -n ${{ inputs.namespace }} -- \
+            wget -qO- ${{ inputs.service-url }} 2>/dev/null | grep -q '"ok"'; then
+            echo "${{ inputs.label }} health check passed"
+            exit 0
+          fi
+          echo "Waiting for ${{ inputs.label }}... ($i/${{ inputs.retries }})"
+          sleep ${{ inputs.interval }}
+        done
+        echo "${{ inputs.label }} smoke test failed"
+        exit 1
