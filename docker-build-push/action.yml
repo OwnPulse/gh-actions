@@ -5,6 +5,10 @@ inputs:
   context:
     description: Docker build context directory
     required: true
+  file:
+    description: Path to the Dockerfile (relative to context)
+    required: false
+    default: ""
   image-name:
     description: Image name (without registry prefix)
     required: true
@@ -28,5 +32,6 @@ runs:
     - uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294  # v7
       with:
         context: ${{ inputs.context }}
+        file: ${{ inputs.file }}
         push: true
         tags: ${{ inputs.registry }}/ownpulse/${{ inputs.image-name }}:${{ inputs.tag }}
