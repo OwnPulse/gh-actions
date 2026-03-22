@@ -50,4 +50,4 @@ runs:
           -n ${{ inputs.namespace }} \
           $VALUES_ARG \
           --set "image.tag=${{ inputs.image-tag }}" \
-          --atomic --timeout ${{ inputs.timeout }}
+          --atomic --force --timeout ${{ inputs.timeout }}
