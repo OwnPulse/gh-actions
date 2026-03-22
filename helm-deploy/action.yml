@@ -1,5 +1,5 @@
 name: Helm Deploy
-description: Deploy a Helm chart with rollout verification and automatic rollback
+description: Deploy a Helm chart with automatic rollback on failure
 
 inputs:
   release-name:
@@ -19,8 +19,9 @@ inputs:
     required: false
     default: ''
   deployment-name:
-    description: Full deployment name for rollout status check
-    required: true
+    description: Full deployment name (reserved for future rollout status check)
+    required: false
+    default: ''
   timeout:
     description: Rollout timeout
     required: false
