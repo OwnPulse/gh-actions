@@ -29,6 +29,16 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Clean up stuck release ${{ inputs.release-name }}
+      shell: bash
+      run: |
+        STATUS=$(helm status ${{ inputs.release-name }} -n ${{ inputs.namespace }} -o json 2>/dev/null | jq -r '.info.status' 2>/dev/null || echo "not-found")
+        if [ "$STATUS" = "pending-install" ] || [ "$STATUS" = "pending-upgrade" ] || [ "$STATUS" = "pending-rollback" ]; then
+          echo "Release ${{ inputs.release-name }} is stuck in $STATUS, rolling back"
+          helm rollback ${{ inputs.release-name }} -n ${{ inputs.namespace }} 2>/dev/null || \
+            helm uninstall ${{ inputs.release-name }} -n ${{ inputs.namespace }} 2>/dev/null || true
+        fi
+
     - name: Deploy ${{ inputs.release-name }}
       shell: bash
       run: |
@@ -39,14 +49,5 @@ runs:
         helm upgrade --install ${{ inputs.release-name }} ${{ inputs.chart-path }} \
           -n ${{ inputs.namespace }} \
           $VALUES_ARG \
-          --set "image.tag=${{ inputs.image-tag }}"
-
-    - name: Verify ${{ inputs.release-name }} rollout
-      id: rollout
-      shell: bash
-      run: kubectl rollout status deployment/${{ inputs.deployment-name }} -n ${{ inputs.namespace }} --timeout=${{ inputs.timeout }}
-
-    - name: Rollback ${{ inputs.release-name }} on failure
-      if: failure() && steps.rollout.outcome == 'failure'
-      shell: bash
-      run: helm rollback ${{ inputs.release-name }} -n ${{ inputs.namespace }}
+          --set "image.tag=${{ inputs.image-tag }}" \
+          --atomic --timeout ${{ inputs.timeout }}

@@ -42,8 +42,13 @@ runs:
         cd "$GITHUB_WORKSPACE"
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
-        git fetch origin badges || true
-        git checkout badges 2>/dev/null || git checkout --orphan badges
+        git stash --include-untracked || true
+        if git fetch origin badges 2>/dev/null; then
+          git checkout -B badges origin/badges
+        else
+          git checkout --orphan badges
+          git rm -rf . 2>/dev/null || true
+        fi
         cp /tmp/badges/${{ inputs.badge-file }} .
         git add ${{ inputs.badge-file }}
         git diff --cached --quiet || git commit -m "Update ${{ inputs.label }} badge"
