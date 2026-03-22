@@ -52,4 +52,10 @@ runs:
         cp /tmp/badges/${{ inputs.badge-file }} .
         git add ${{ inputs.badge-file }}
         git diff --cached --quiet || git commit -m "Update ${{ inputs.label }} badge"
-        git push origin badges
+        # Retry with rebase to handle concurrent badge pushes
+        for attempt in 1 2 3; do
+          git push origin badges && break
+          echo "Push attempt $attempt failed, rebasing and retrying..."
+          git fetch origin badges
+          git rebase origin/badges
+        done
