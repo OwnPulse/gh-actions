@@ -1,5 +1,5 @@
 name: Helm Deploy
-description: Deploy a Helm chart with rollout verification and automatic rollback
+description: Deploy a Helm chart with automatic rollback on failure
 
 inputs:
   release-name:
@@ -19,8 +19,9 @@ inputs:
     required: false
     default: ''
   deployment-name:
-    description: Full deployment name for rollout status check
-    required: true
+    description: Full deployment name (reserved for future rollout status check)
+    required: false
+    default: ''
   timeout:
     description: Rollout timeout
     required: false
@@ -39,14 +40,6 @@ runs:
             helm uninstall ${{ inputs.release-name }} -n ${{ inputs.namespace }} 2>/dev/null || true
         fi
 
-    - name: Clear kubectl field manager conflicts
-      shell: bash
-      run: |
-        # After rollbacks, kubectl takes ownership of fields that Helm manages.
-        # Re-apply the deployment server-side with Helm's field manager to reclaim ownership.
-        kubectl get deployment ${{ inputs.deployment-name }} -n ${{ inputs.namespace }} -o yaml 2>/dev/null | \
-          kubectl apply --server-side --force-conflicts --field-manager='helm' -f - 2>/dev/null || true
-
     - name: Deploy ${{ inputs.release-name }}
       shell: bash
       run: |
@@ -58,4 +51,4 @@ runs:
           -n ${{ inputs.namespace }} \
           $VALUES_ARG \
           --set "image.tag=${{ inputs.image-tag }}" \
-          --atomic --timeout ${{ inputs.timeout }}
+          --force-conflicts --rollback-on-failure --timeout ${{ inputs.timeout }}
