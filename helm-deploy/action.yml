@@ -51,4 +51,4 @@ runs:
           -n ${{ inputs.namespace }} \
           $VALUES_ARG \
           --set "image.tag=${{ inputs.image-tag }}" \
-          --force-conflicts --rollback-on-failure --timeout ${{ inputs.timeout }}
+          --rollback-on-failure --timeout ${{ inputs.timeout }}
