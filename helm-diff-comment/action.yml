@@ -1,0 +1,82 @@
+name: Helm Diff Comment
+description: Post a formatted Helm diff as a PR comment or step summary
+
+inputs:
+  diff-file:
+    description: Path to a text file containing the Helm diff output
+    required: true
+  mode:
+    description: "Output mode: 'pr-comment' to post/update a PR comment, 'step-summary' to append to GITHUB_STEP_SUMMARY"
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Post Helm diff (pr-comment)
+      if: inputs.mode == 'pr-comment'
+      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd  # v8
+      env:
+        DIFF_FILE: ${{ inputs.diff-file }}
+      with:
+        script: |
+          const fs = require('fs');
+          const raw = fs.readFileSync(process.env.DIFF_FILE, 'utf8').trim();
+          const marker = '<!-- helm-diff-preview -->';
+
+          // Sanitize triple backticks in diff content to prevent markdown injection
+          const sanitize = (s) => s.replace(/```/g, '` ` `');
+
+          let body;
+          if (!raw) {
+            body = `${marker}\n### Helm Preview\n\nNo changes to rendered Kubernetes manifests.`;
+          } else {
+            const safe = sanitize(raw);
+            const truncated = safe.length > 60000 ? safe.substring(0, 60000) + '\n... (truncated)' : safe;
+            body = `${marker}\n### Helm Preview\n\n<details><summary>Show diff</summary>\n\n\`\`\`diff\n${truncated}\n\`\`\`\n\n</details>`;
+          }
+
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+          });
+          const existing = comments.find(c => c.body.includes(marker));
+          if (existing) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: existing.id,
+              body,
+            });
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
+          }
+
+    - name: Post Helm diff (step-summary)
+      if: inputs.mode == 'step-summary'
+      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd  # v8
+      env:
+        DIFF_FILE: ${{ inputs.diff-file }}
+      with:
+        script: |
+          const fs = require('fs');
+          const raw = fs.readFileSync(process.env.DIFF_FILE, 'utf8').trim();
+
+          // Sanitize triple backticks in diff content to prevent markdown injection
+          const sanitize = (s) => s.replace(/```/g, '` ` `');
+
+          let summary;
+          if (!raw) {
+            summary = `### Helm Diff\n\nNo changes detected.\n`;
+          } else {
+            const safe = sanitize(raw);
+            const truncated = safe.length > 60000 ? safe.substring(0, 60000) + '\n... (truncated)' : safe;
+            summary = `### Helm Diff\n\n<details><summary>Show diff</summary>\n\n\`\`\`diff\n${truncated}\n\`\`\`\n\n</details>\n`;
+          }
+
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
