@@ -1,0 +1,126 @@
+name: Tailscale Cluster Connect
+description: >
+  Connect to a k3s cluster over Tailscale. Authenticates via OAuth, discovers
+  the node peer, fetches kubeconfig over SSH, rewrites the server URL to the
+  Tailscale IP, and installs kubectl (and optionally helm). After this action
+  runs, kubectl and helm are configured and ready to use.
+
+inputs:
+  oauth-client-id:
+    description: Tailscale OAuth client ID
+    required: true
+  oauth-secret:
+    description: Tailscale OAuth client secret
+    required: true
+  ssh-private-key:
+    description: SSH private key (ed25519) for the k3s node
+    required: true
+  tags:
+    description: Tailscale ACL tags for the ephemeral node
+    required: false
+    default: 'tag:ci-runner'
+  hostname:
+    description: Tailscale hostname of the k3s node to connect to
+    required: false
+    default: 'ownpulse-us'
+  peer-discovery-timeout:
+    description: Maximum seconds to wait for the peer to appear on the tailnet
+    required: false
+    default: '60'
+  install-helm:
+    description: Whether to install Helm (true/false)
+    required: false
+    default: 'true'
+  helm-version:
+    description: Helm version to install
+    required: false
+    default: 'v4.1.3'
+
+outputs:
+  peer-ip:
+    description: Tailscale IPv4 address of the k3s node
+    value: ${{ steps.kubeconfig.outputs.peer-ip }}
+  kubeconfig:
+    description: Path to the kubeconfig file
+    value: ${{ steps.kubeconfig.outputs.kubeconfig-path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Connect to Tailscale
+      uses: tailscale/github-action@4e4c49acaa9818630ce0bd7a564372c17e33fb4d
+      with:
+        oauth-client-id: ${{ inputs.oauth-client-id }}
+        oauth-secret: ${{ inputs.oauth-secret }}
+        tags: ${{ inputs.tags }}
+
+    - name: Fetch kubeconfig via Tailscale
+      id: kubeconfig
+      shell: bash
+      env:
+        SSH_PRIVATE_KEY: ${{ inputs.ssh-private-key }}
+        TS_HOSTNAME: ${{ inputs.hostname }}
+        DISCOVERY_TIMEOUT: ${{ inputs.peer-discovery-timeout }}
+      run: |
+        # Calculate retry count (2s between attempts)
+        MAX_ATTEMPTS=$(( DISCOVERY_TIMEOUT / 2 ))
+        [ "$MAX_ATTEMPTS" -lt 1 ] && MAX_ATTEMPTS=1
+
+        # Discover peer on the tailnet
+        PEER_IP=""
+        for i in $(seq 1 "$MAX_ATTEMPTS"); do
+          PEER_IP=$(sudo tailscale status | awk -v host="$TS_HOSTNAME" '$0 ~ host {print $1; exit}')
+          [ -n "$PEER_IP" ] && break
+          echo "Attempt $i/$MAX_ATTEMPTS: $TS_HOSTNAME peer not found, waiting..."
+          sleep 2
+        done
+
+        if [ -z "$PEER_IP" ]; then
+          echo "::error::Failed to find $TS_HOSTNAME on tailnet after ${DISCOVERY_TIMEOUT}s"
+          sudo tailscale status
+          exit 1
+        fi
+        echo "Resolved $TS_HOSTNAME to $PEER_IP"
+        echo "peer-ip=$PEER_IP" >> "$GITHUB_OUTPUT"
+
+        # Add host entry so SSH can resolve by name
+        echo "$PEER_IP $TS_HOSTNAME" | sudo tee -a /etc/hosts
+
+        # Set up SSH
+        mkdir -p ~/.ssh
+        echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+        chmod 600 ~/.ssh/id_ed25519
+        for i in $(seq 1 5); do
+          ssh-keyscan -t ed25519 "$TS_HOSTNAME" >> ~/.ssh/known_hosts 2>/dev/null && break
+          sleep 3
+        done
+
+        # Fetch kubeconfig from the k3s node
+        KC=$(ssh "root@${TS_HOSTNAME}" 'cat /etc/rancher/k3s/k3s.yaml')
+        TSIP=$(ssh "root@${TS_HOSTNAME}" 'tailscale ip -4')
+
+        # Rewrite server URL to the Tailscale IP
+        KUBECONFIG_PATH="$HOME/.kube/config"
+        mkdir -p "$HOME/.kube"
+        echo "$KC" | sed "s|127.0.0.1|$TSIP|g" > "$KUBECONFIG_PATH"
+        chmod 600 "$KUBECONFIG_PATH"
+
+        echo "kubeconfig-path=$KUBECONFIG_PATH" >> "$GITHUB_OUTPUT"
+        echo "KUBECONFIG=$KUBECONFIG_PATH" >> "$GITHUB_ENV"
+
+    - name: Install kubectl
+      shell: bash
+      run: |
+        curl -sLO "https://dl.k8s.io/release/$(curl -sL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+        chmod +x kubectl && sudo mv kubectl /usr/local/bin/
+
+    - name: Install Helm
+      if: inputs.install-helm == 'true'
+      shell: bash
+      run: |
+        curl -fsSL "https://raw.githubusercontent.com/helm/helm/${{ inputs.helm-version }}/scripts/get-helm-3" \
+          | DESIRED_VERSION=${{ inputs.helm-version }} bash
+
+    - name: Verify cluster connectivity
+      shell: bash
+      run: kubectl get nodes
