@@ -28,5 +28,8 @@ runs:
         curl -fsSL "https://github.com/getsops/sops/releases/download/v${{ inputs.sops-version }}/sops-v${{ inputs.sops-version }}.${SUFFIX}" -o "$INSTALL_DIR/sops"
         chmod +x "$INSTALL_DIR/sops"
         echo "$INSTALL_DIR" >> "$GITHUB_PATH"
+        # Write key file for sops age backend
         mkdir -p "$HOME/.config/sops/age"
         echo "${{ inputs.age-key }}" > "$HOME/.config/sops/age/keys.txt"
+        # Also set env var as belt-and-suspenders (works on all platforms)
+        echo "SOPS_AGE_KEY=${{ inputs.age-key }}" >> "$GITHUB_ENV"
