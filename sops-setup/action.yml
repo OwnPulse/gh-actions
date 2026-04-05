@@ -18,7 +18,14 @@ runs:
       run: |
         INSTALL_DIR="${HOME}/.local/bin"
         mkdir -p "$INSTALL_DIR"
-        curl -fsSL "https://github.com/getsops/sops/releases/download/v${{ inputs.sops-version }}/sops-v${{ inputs.sops-version }}.linux.amd64" -o "$INSTALL_DIR/sops"
+        case "$(uname -s)-$(uname -m)" in
+          Linux-x86_64)  SUFFIX="linux.amd64" ;;
+          Linux-aarch64) SUFFIX="linux.arm64" ;;
+          Darwin-arm64)  SUFFIX="darwin.arm64" ;;
+          Darwin-x86_64) SUFFIX="darwin.amd64" ;;
+          *) echo "Unsupported platform: $(uname -s)-$(uname -m)" && exit 1 ;;
+        esac
+        curl -fsSL "https://github.com/getsops/sops/releases/download/v${{ inputs.sops-version }}/sops-v${{ inputs.sops-version }}.${SUFFIX}" -o "$INSTALL_DIR/sops"
         chmod +x "$INSTALL_DIR/sops"
         echo "$INSTALL_DIR" >> "$GITHUB_PATH"
         mkdir -p "$HOME/.config/sops/age"

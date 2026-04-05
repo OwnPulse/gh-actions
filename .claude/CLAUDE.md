@@ -36,10 +36,23 @@
 Prefer shared actions from `OwnPulse/gh-actions` over inline workflow steps.
 Reference as: `uses: OwnPulse/gh-actions/<action-name>@v1`
 
-## Agents in this repo
+## Agents
+
+**Write agents** (spawn with `isolation: "worktree"`):
+- astro-web
+- k8s-infra
+- react-frontend
+- rust-backend
+- swift-ios
+- userdocs
 
 **Review agents** (read-only, no worktree needed):
+- arch-review
 - code-review
+- feature-plan
+- principles-guardian
+- security-review
+- test-review
 
 ## Agent Teams
 
@@ -68,6 +81,10 @@ changes. **Do it directly** for single-file fixes and quick questions.
 6. Fix issues flagged by reviewers. **All must-fix items from test-review must be
    resolved before committing** — test gaps are never deferred. Ask write agents
    to add missing tests, then re-run test-review to confirm.
+7. **Clean up after yourself.** When a task is complete (committed or abandoned),
+   remove worktrees and branches that are no longer needed. Run `opdev clean --all`
+   or manually `git worktree remove <path>` + `git branch -d <branch>`. Agent
+   worktrees (`.claude/worktrees/agent-*`) accumulate fast — don't leave them.
 
 Keep implementations minimal. Prefer fewer files, less indirection, and no
 speculative features. If three lines work, don't write a helper.
